@@ -1,0 +1,514 @@
+---
+title: "Untitled"
+author: "Yihao Li(yl4326)"
+date: "2020/1/16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Basic Graphing
+```{r}
+library(ucidata)
+library(tidyverse)
+library(nullabor)
+library(dplyr)
+```
+
+Use one of the numeric variables in the `abalone` dataset.
+```{r}
+head(abalone)  
+```
+
+#traditional histogram, for continuous value, aes(variable), remember to define bins = or binwidth =  
+```{r}
+ggplot(abalone, aes(diameter))+
+  geom_histogram(bins = 10)
+```
+
+# facet by another variable
+```{r}
+ggplot(abalone, aes(diameter)) + 
+  geom_histogram(bins = 25) + 
+  facet_grid("sex")
+```
+
+Plot multiple boxplots, grouped by `sex` for the same variable. The boxplots should be ordered by decreasing median from left to right.
+
+```{r,fig.width = 4, fig.height = 4}
+library(forcats)
+ggplot(abalone, aes(x = fct_reorder(sex, diameter, median, .desc = TRUE), y = diameter))+
+  geom_boxplot()+
+  xlab("sex")
+```
+
+Plot overlapping density curves of the same variable, one curve per factor level of `sex`, on a single set of axes. Each curve should be a different color.
+
+```{r, fig.width = 4, fig.height = 4}
+ggplot(abalone, aes(diameter))+
+  geom_density(aes(color=sex))
+```
+
+
+a) Use `tidyr::gather()` to convert the numeric columns in the  `glass` dataset in the **ucidata** package to two columns: `variable` and `value`. The first few rows should be:
+
+```
+  variable   value
+1       RI 1.52101
+2       RI 1.51761
+3       RI 1.51618
+4       RI 1.51766
+5       RI 1.51742
+6       RI 1.51596
+```
+```{r}
+glass
+```
+`glass` have the first column removed, select_if it is numeric, gather with category type column `variable` and value column named `value`
+```{r}
+gatherglass = glass[-1] %>% dplyr::select_if(., is.numeric, ) %>% tidyr::gather(key = "variable", value = "value")
+head(gatherglass)
+```
+
+Use this form to plot histograms of all of the variables in one plot by faceting on `variable`. 
+```{r}
+ggplot(gatherglass, aes(value))+
+  geom_histogram()+
+  facet_wrap("variable", scales = "free")
+```
+
+# Unimodal type check normal
+
+1. Draw a normal curve with same mean and std.deviation
+
+```{r}
+ggplot(glass, aes(Al))+ 
+  geom_histogram(binwidth = 0.1)+ 
+  stat_function(fun = function(x, mean, sd, n,bw){
+      dnorm(x = x, mean = mean, sd = sd) * n * bw
+    },
+    args = c(mean = mean(glass$Al), sd = sd(glass$Al), n=nrow(glass), bw = 0.1))
+```
+
+2. Shapiro-Wilk test
+
+```{r}
+shapiro.test(glass$Al)
+```
+
+3. Draw a quantile-quantile (QQ) plot of the variable. 
+```{r,fig.width = 4, fig.height = 4}
+ggplot(glass, aes(sample = Al)) +
+  geom_qq() +
+  geom_qq_line()
+```
+
+Use the **nullabor** package to create a lineup of histograms in which one panel is the real data and the others are fake data generated from a null hypothesis of normality. Can you pick out the real data? If so, how does the shape of its histogram differ from the others? 
+
+```{r}
+al <- glass[c("Al")]
+ggplot(lineup(null_dist("Al", "norm"), true = al, pos = 1, n = 9), aes(Al)) +
+  geom_histogram() +
+  facet_wrap (~.sample)
+```
+
+```{r}
+fire = forest_fires[c("month", "area", "rain", "wind", "temp")]
+fire$month <- factor(fire$month, levels = c("jan","feb","mar","apr","may","jun","jul","aug","sep","oct", "nov", "dec"))
+ggplot(fire, aes(area)) +
+  geom_histogram() +
+  facet_wrap(~month, scale = "free")
+```
+```{r,fig.width = 5, fig.height = 4}
+average <- fire %>% group_by(month) %>% summarize (mean_area = mean(area), mean_temp = mean(temp), mean_wind = mean(wind), mean_rain = mean(rain))
+ggplot(average, aes(x = month, y = mean_area)) +
+  geom_col()
+ggplot(fire, aes(x = fct_reorder(month, area, max, .desc = TRUE), y = area))+
+  geom_boxplot()+
+  xlab("month")
+```
+
+# Horizontal Barchart
+
+
+(a) Create a horizontal bar chart of the responses to Q20.
+```{r}
+data = forwards::useR2016
+
+q20_freq <- data %>% 
+  group_by(Q20) %>% 
+  summarise(freq = n()) %>% 
+  mutate(Q20 = ifelse(is.na(Q20), "NA", as.character(Q20)))
+
+ggplot(q20_freq, aes(x=fct_reorder(.f=Q20, .x=freq), y=freq)) + 
+  geom_col(color="black", fill="orange") + 
+  coord_flip() + 
+  labs(x="Medium", y="Count", title="Survey responses: Preferred medium for R community news",
+       caption="Dataset: useR2016 \n Package: forwards \nLink:https://cran.r-project.org/web/packages/forwards/forwards.pdf") 
+```
+(b) Create a vertical bar chart of the responses to Q11.
+```{r}
+q11_freq <- data %>% 
+  group_by(Q11) %>% 
+  summarise(freq = n()) %>% 
+  mutate(Q11 = ifelse(is.na(Q11), "NA", as.character(Q11)))
+
+q11_freq$Q11 <- factor(q11_freq$Q11, levels = c("< 2 years", "2-5 years", "5-10 years", "> 10 years", "NA"))
+  
+ggplot(q11_freq, aes(x=Q11, y=freq)) +
+  geom_col(color="black", fill="orange") + 
+  labs(x="Years", y="Count", title="Survey responses: Duration for which they have been using R",
+       caption="Dataset: useR2016 \n Package: forwards \n Link:https://cran.r-project.org/web/packages/forwards/forwards.pdf") 
+```
+
+(c) Create a horizontal stacked bar chart showing the proportion of respondents for each level of Q11 who are over 35 vs. 35 or under. Use a descriptive title. 
+```{r}
+q11_stack <- data[, c("Q11", "Q3")] %>%
+  na.omit() %>% 
+  group_by(Q11, Q3) %>% 
+  count(Q11)
+
+
+ggplot(q11_stack, aes(fill=Q3, y=n, x=Q11)) +
+  geom_bar(position = "fill", stat = "identity") + 
+  xlab("usage duration") + 
+  ylab("proportion")+
+  coord_flip()+
+  ggtitle("R usage breakdown with respect to age distribution")
+```
+
+(d) Create a horizontal stacked bar chart showing the proportional breakdown of Q11 for each level of Q3, faceted on Q2. Use a descriptive title. 
+```{r}
+q11_facet <- data[, c("Q11", "Q3", "Q2")] %>% na.omit() %>% group_by(Q11, Q3, Q2) %>% count(Q3)
+
+ggplot(q11_facet, aes(fill=Q11, y=n, x=Q3)) +
+  geom_bar(position = "fill", stat = "identity") +
+  facet_grid(q11_facet$Q2) +
+  xlab("Age Breakdown") + 
+  ylab("proportion")+
+  guides(fill=guide_legend(title = "R Usage")) +
+  coord_flip()+
+  ggtitle("R usage breakdown by gender and age group")
+```
+
+(e) For the next part, we will need to be able to add line breaks (`\n`) to long tick mark labels. Write a function that takes a character string and a desired approximate line length in number of characters and substitutes a line break for the first space after every multiple of the specified line length.
+
+```{r}
+line_breaks <- function(x, n){
+split_str <- strsplit(x, "")
+split_str <- split_str[[1]]
+
+for (i in 1:length(split_str)){
+  if (i%%n == 0){
+    while (split_str[i] != " " & i<length(split_str)) {
+      i=i+1
+    }
+    if(split_str[i] == " "){
+      split_str[i] = "\n"
+    }
+  }
+}
+
+x_new <- paste(split_str, collapse='')
+return(x_new)
+}
+x <- "We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness."
+
+line_breaks(x, 50)
+```
+
+(f) Create a horizontal bar chart that shows the percentage of positive responses for `Q13 - Q13_F`. Use your function from part (e) to add line breaks to the responses. Your graph should have one bar each for `Q13 - Q13_F`.
+```{r}
+  df_f1 = data %>% group_by(Q13) %>% summarize(count = n())%>% mutate(percent = count*100/sum(count)) 
+  df_f2 = data %>% group_by(Q13_B) %>% summarize(count = n())%>% mutate(percent = count*100/sum(count))   
+  df_f3 = data %>% group_by(Q13_C) %>% summarize(count = n())%>% mutate(percent = count*100/sum(count)) 
+  df_f4 = data %>% group_by(Q13_D) %>% summarize(count = n())%>% mutate(percent = count*100/sum(count)) 
+  df_f5 = data %>% group_by(Q13_E) %>% summarize(count = n())%>% mutate(percent = count*100/sum(count))   
+  df_f6 = data %>% group_by(Q13_F) %>% summarize(count = n())%>% mutate(percent = count*100/sum(count)) 
+  result = data_frame(question = c(line_breaks(df_f1$Q13[1],30),
+               line_breaks(df_f2$Q13_B[1],30),
+               line_breaks(df_f3$Q13_C[1],30),
+               line_breaks(df_f4$Q13_D[1],30),
+               line_breaks(df_f5$Q13_E[1],30),
+               line_breaks(df_f6$Q13_F[1],30)),
+         percentage = c(df_f1$percent[1],
+               df_f2$percent[1],
+               df_f3$percent[1],
+               df_f4$percent[1],
+               df_f5$percent[1],
+               df_f6$percent[1]))
+  ggplot(result, aes(x = question, y = percentage))+
+    geom_col(color="black", fill="orange")+
+    labs(title = "Percentage of positive response by Q")+
+    coord_flip()
+```
+
+(a) Use the `paths_allowed()` function from **robotstxt** to make sure it's ok to scrape https://www.rottentomatoes.com/browse/box-office/. Then use **rvest** functions to find relative links to individual movies listed on this page. Finally, paste the base URL to each to create a character vector of URLs.
+Display the first six lines of the vector.
+```{r}
+library(rvest)
+library(robotstxt)
+library(stringi)
+```
+
+```{r}
+paths_allowed("https://www.rottentomatoes.com/browse/box-office/")
+
+data <- read_html("https://www.rottentomatoes.com/browse/box-office/") %>%
+  html_nodes("table") %>%
+  .[[3]] %>% 
+  html_nodes("tr") %>%
+  html_nodes("a") %>%
+  html_attr("href")
+
+data <- data[10:length(data)]
+
+links_current <- c() 
+for (i in 1:length(data)){
+  links_current[i] <- paste("https://www.rottentomatoes.com",data[i], sep='')
+}
+head(links_current, 6)
+```
+
+(b) Write a function to read the content of one page and pull out the title, tomatometer score and audience score of the film. Then iterate over the vector of all movies using `do.call() / rbind() / lapply()` or `dplyr::bind_rows() / purrr::map()` to create a three column data frame (or tibble).
+
+Display the first six lines of your data frame.
+
+(Results will vary depending on when you pull the data.)
+ 
+For help, see this SO post: https://stackoverflow.com/questions/36709184/build-data-frame-from-multiple-rvest-elements
+
+
+Write your data to file so you don't need to scrape the site each time you need to access it.
+
+```{r}
+find_triple = function(address){
+  web_data <- read_html(address)
+  
+  title = web_data %>%
+    html_nodes("h1.mop-ratings-wrap__title.mop-ratings-wrap__title--top")%>%
+    html_text()
+  
+  score = web_data %>% 
+    html_nodes("h2.mop-ratings-wrap__score")%>%
+    html_text("span.mop-ratings-wrap__percentage")%>%
+    stri_match_last_regex("[0-9]+%")
+  
+  return(c(title,score[1],score[2]))
+}
+aggregate_list<- lapply(links_current, find_triple)
+aggregate_df = data.frame(do.call(rbind.data.frame, aggregate_list)) 
+names(aggregate_df) = c("Name", "tomatometer_score", "audience_score")
+
+#change the data in df into proper type and format
+aggregate_df$Name = as.character(aggregate_df$Name)
+for (i in 1:length(aggregate_df$Name)){
+  aggregate_df$Name[i] <- line_breaks(aggregate_df$Name[i],40)
+}
+aggregate_df$tomatometer_score = as.numeric(sub("%", "", aggregate_df$tomatometer_score))
+aggregate_df$audience_score = as.numeric(sub("%", "", aggregate_df$audience_score))
+write.csv(aggregate_df,file = "current_aggregate_df.csv")
+```
+
+(c) Create a Cleveland dot plot of tomatometer scores.
+
+```{r}
+aggregate_df = read.csv("current_aggregate_df.csv")
+
+clean_df = aggregate_df[-1] %>% na.omit()
+
+theme_dotplot = theme_bw(16) +
+  theme(axis.text.y = element_text(size = rel(.75)),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_text(size = rel(.75)),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(size = 0.5),
+        panel.grid.minor.x = element_blank())
+
+ggplot(clean_df, aes(x = tomatometer_score, y = fct_reorder(Name, tomatometer_score))) +
+  geom_point(color = "blue") + 
+  ylab("") +
+  ggtitle("The tomatometer score\nof top movies") +
+  theme_dotplot
+```
+
+(d) Create a Cleveland dot plot of tomatometer *and* audience scores on the same graph, one color for each. Sort by audience score.
+
+```{r}
+gathered_df = clean_df %>% tidyr::gather(key = "type", value = "score",-Name) 
+
+ggplot(gathered_df, aes(x = score,
+                     y = fct_reorder2(Name, type == "audience_score", score, .desc = FALSE),
+                     color = type)) +
+         geom_point() +
+         ylab("") +
+         ggtitle("Scores of top movies") +
+         theme(plot.title = element_text(size = 15)) +
+         theme_dotplot
+```
+
+(e) Run your code again for the weekend of July 5 - July 7, 2019. Use **plotly** to create a scatterplot of audience score vs. tomatometer score with the ability to hover over the point to see the film title.
+
+```{r}
+paths_allowed("https://www.rottentomatoes.com/browse/box-office/?rank_id=12&country=us")
+
+data <- read_html("https://www.rottentomatoes.com/browse/box-office/?rank_id=12&country=us") %>%
+  html_nodes("table") %>%
+  .[[3]] %>% 
+  html_nodes("tr") %>%
+  html_nodes("a") %>%
+  html_attr("href")
+
+data <- data[10:length(data)]
+
+links <- c() 
+for (i in 1:length(data)){
+  links[i] <- paste("https://www.rottentomatoes.com",data[i], sep='')
+}
+head(links, 6)
+
+aggregate_list<-lapply(links, find_triple)
+aggregate_df = data.frame(do.call(rbind.data.frame, aggregate_list)) 
+names(aggregate_df) = c("Name", "tomatometer_score", "audience_score")
+
+#change the data in df into proper type and format
+aggregate_df$Name = as.character(aggregate_df$Name)
+for (i in 1:length(aggregate_df$Name)){
+  aggregate_df$Name[i] <- line_breaks(aggregate_df$Name[i],40)
+}
+aggregate_df$tomatometer_score = as.numeric(sub("%", "", aggregate_df$tomatometer_score))
+aggregate_df$audience_score = as.numeric(sub("%", "", aggregate_df$audience_score))
+write.csv(aggregate_df, "aggregate_df_jul.csv")
+```
+
+```{r fig.height=20,fig.width=10}
+aggregate_df = read.csv("aggregate_df_jul.csv")[-1]
+
+clean_df = aggregate_df %>% na.omit()
+
+ggplot(clean_df, aes(x = tomatometer_score, y = fct_reorder(Name, tomatometer_score))) +
+  geom_point(color = "blue") + 
+  ylab("") +
+  ggtitle("The tomatometer score of top movies(Jul 5 to Jul 7)") +
+  theme(plot.title = element_text(size = 15)) +
+  theme(text=element_text(size=20))+
+  theme_dotplot
+
+
+gathered_df = clean_df %>% tidyr::gather(key = "type", value = "score",-Name) 
+
+ggplot(gathered_df, aes(x = score,
+                     y = fct_reorder2(Name, type == "audience_score", score, .desc = FALSE),
+                     color = type)) +
+         geom_point() +
+         ylab("") +
+         ggtitle("Scores of top movies(Jul 5 to Jul 7)") +
+         theme(plot.title = element_text(size = 15)) +
+         theme(text=element_text(size=20))+
+         theme_dotplot
+```
+
+```{r}
+#library(plotly)
+#plot_ly(gathered_df, x = ~score, y = ~Name,
+#color = ~type, text = ~Name,
+#hoverinfo = 'text') %>%
+#add_markers()
+```
+
+### 3. Weather
+
+[14 points]
+
+Data: `weather` dataset in **nycflights13** package (available on CRAN)
+
+
+For parts (a) - (d) draw four plots of `wind_dir` vs. `humid` as indicated. For all, adjust parameters to the levels that provide the best views of the data.
+
+(a) Points with alpha blending
+
+```{r}
+library(nycflights13)
+ggplot(weather, aes(x = humid, y = wind_dir)) +
+  geom_point(alpha = 0.2, stroke = 0)
+```
+
+(b) Points with alpha blending + density estimate contour lines
+
+```{r}
+library(MASS)
+ggplot(weather, aes(x = humid, y = wind_dir)) +
+  geom_point(alpha = 0.2, stroke = 0)+
+  geom_density_2d()
+```
+
+(c) Hexagonal heatmap of bin counts
+
+```{r}
+library(hexbin)
+ggplot(weather, aes(x = humid, y = wind_dir)) +
+  scale_fill_viridis_c()+
+  geom_hex()
+```
+
+(d) Square heatmap of bin counts
+
+```{r}
+ggplot(weather, aes(x = humid, y = wind_dir)) +
+  scale_fill_viridis_c()+
+  geom_bin2d(binwidth=c(5,25))
+```
+
+(e) Describe noteworthy features of the data, using the "Movie ratings" example on page 82 (last page of Section 5.3) as a guide. 
+
+There's several "heated bin" i.e. there's high frequency of record fell into these 4 peaks. (Add more)
+
+- There are majorly two peaks in the data, i.e., high density points:
+  one at around (humid=40, wind_dir=300)
+  and the other one around (humid=, wind_dir=)
+
+- A high density region is present around wind_dir=25 and humid from 50 to 90.
+
+- Density of data is relatively less below humid=25
+
+- There is a relatively low density region between the high density peak and high denisty region:
+    from wind_dir (100 to 150) and humid (25 to 100)
+
+(f) Draw a scatterplot of `humid` vs. `temp`. Why does the plot have diagonal lines?
+
+```{r}
+ggplot(weather, aes(x = temp, y = humid)) +
+  geom_point(alpha = 0.2)
+```
+
+The diagonal pattern is because of 
+
+(g) Draw a scatterplot matrix of the continuous variables in the `weather` dataset. Which pairs of variables are strongly positively associated and which are strongly negatively associated?
+
+```{r}
+library(ggplot2movies) # data
+cont_data = weather %>% dplyr::select(temp, dewp, humid, wind_speed, pressure)
+plot(cont_data)
+```
+
+strong positive correlation: temperature and dewpoint
+strong negative correlation: None
+
+(h) Color the points by `origin`.  Do any new patterns emerge?
+```{r}
+library(GGally)
+library(lattice)
+cont_data = weather %>% dplyr::select(origin, temp, dewp, humid, wind_speed, pressure)
+
+pm <- ggpairs(
+ cont_data[, 2:6],
+ mapping = ggplot2::aes(color = cont_data$origin, alpha = 0.1),
+ upper = list(continuous = wrap("density", alpha = 0.6), combo = "box_no_facet"),
+ lower = list(continuous = wrap("points", alpha = 0.1,size = 0.05), 
+              combo = wrap("dot_no_facet", alpha = 0.1,size = 0.05)),
+ legend = 1
+)
+pm
+```
